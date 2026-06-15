@@ -202,6 +202,10 @@
     position: relative;
     height: 320px;
   }
+  .chart-wrap-tc {
+    position: relative;
+    height: 420px;
+  }
   .participacion-row {
     display: grid;
     grid-template-columns: 280px 1fr;
@@ -304,7 +308,7 @@
 <div class="charts-row">
   <div class="chart-card full">
     <h3 id="tituloTCBancos">Tipo de Cambio de Compra por Banco</h3>
-    <canvas id="chartTCBancos"></canvas>
+    <div class="chart-wrap-tc"><canvas id="chartTCBancos"></canvas></div>
   </div>
 </div>
 
@@ -826,7 +830,7 @@ const chartAnio = new Chart(document.getElementById('chartAnio'), {
 const baseOptionsTC = {
   indexAxis: 'y',
   responsive: true,
-  maintainAspectRatio: true,
+  maintainAspectRatio: false,
   layout: { padding: { right: 40 } },
   plugins: {
     legend: { display: false },
@@ -1022,9 +1026,7 @@ function updateTCBancos(){
       items.push({ nombre: SHORT[name], tc: tc, color: COLOR_BARRA });
     }
   });
-  const bcbItem = items[0];
-  const sorted = items.slice(1).sort((a,b)=>a.tc-b.tc);
-  sorted.push(bcbItem);
+  const sorted = items.slice().sort((a,b)=>a.tc-b.tc);
   chartTCBancos.data.labels = sorted.map(x=>x.nombre);
   chartTCBancos.data.datasets[0].data = sorted.map(x=>x.tc);
   chartTCBancos.data.datasets[0].backgroundColor = sorted.map(x=>x.color);
