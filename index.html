@@ -300,6 +300,14 @@
   </div>
 </div>
 
+<!-- TC de Compra por Banco (fecha específica) -->
+<div class="charts-row">
+  <div class="chart-card full">
+    <h3 id="tituloTCBancos">Tipo de Cambio de Compra por Banco</h3>
+    <canvas id="chartTCBancos"></canvas>
+  </div>
+</div>
+
 <!-- Montos -->
 <div class="grid-monto">
   <div class="card">
@@ -717,4 +725,583 @@ const selRangoTipo = document.getElementById('selRangoTipo');
 const selRangoMes = document.getElementById('selRangoMes');
 const inputRangoDesde = document.getElementById('rangoDesde');
 const inputRangoHasta = document.getElementById('rangoHasta');
-co
+const wrapRangoMes = document.getElementById('wrapRangoMes');
+const wrapRangoDesde = document.getElementById('wrapRangoDesde');
+const wrapRangoHasta = document.getElementById('wrapRangoHasta');
+
+function isoFecha(rec){
+  return rec.year + '-' + String(rec.monIdx+1).padStart(2,'0') + '-' + String(rec.day).padStart(2,'0');
+}
+
+monthKeys.forEach(mk=>{
+  const [y,mm] = mk.split('-');
+  const opt = document.createElement('option');
+  opt.value = mk;
+  opt.textContent = MONTH_FULL[parseInt(mm,10)-1] + ' ' + y;
+  selRangoMes.appendChild(opt);
+});
+
+const firstRec = RECORDS[0];
+const lastRec = RECORDS[lastIdx];
+inputRangoDesde.min = inputRangoHasta.min = isoFecha(firstRec);
+inputRangoDesde.max = inputRangoHasta.max = isoFecha(lastRec);
+inputRangoDesde.value = isoFecha(firstRec);
+inputRangoHasta.value = isoFecha(lastRec);
+selRangoMes.value = lastRec.monthKey;
+selRangoTipo.value = 'ytd';
+
+// ---- Rango personalizado para "Monto Día" (KPI y gráfico) ----
+const inputMontoDiaDesde = document.getElementById('montoDiaDesde');
+const inputMontoDiaHasta = document.getElementById('montoDiaHasta');
+inputMontoDiaDesde.min = inputMontoDiaHasta.min = isoFecha(firstRec);
+inputMontoDiaDesde.max = inputMontoDiaHasta.max = isoFecha(lastRec);
+
+function actualizarVisibilidadRango(){
+  const tipo = selRangoTipo.value;
+  wrapRangoMes.style.display = (tipo === 'mes') ? '' : 'none';
+  wrapRangoDesde.style.display = (tipo === 'custom') ? '' : 'none';
+  wrapRangoHasta.style.display = (tipo === 'custom') ? '' : 'none';
+}
+
+function getRecordsRango(){
+  const tipo = selRangoTipo.value;
+  if(tipo === 'mes'){
+    const mk = selRangoMes.value;
+    return RECORDS.filter(r=>r.monthKey === mk);
+  } else if(tipo === 'custom'){
+    const desde = inputRangoDesde.value;
+    const hasta = inputRangoHasta.value;
+    return RECORDS.filter(r=>{
+      const f = isoFecha(r);
+      return (!desde || f >= desde) && (!hasta || f <= hasta);
+    });
+  }
+  // ytd (por defecto): año actual de la última fecha disponible
+  return RECORDS.filter(r=>r.year === lastRec.year);
+}
+
+// ---- Charts ----
+Chart.register(ChartDataLabels);
+
+const baseOptionsHorizontal = {
+  indexAxis: 'y',
+  responsive: true,
+  maintainAspectRatio: true,
+  layout: { padding: { right: 40 } },
+  plugins: {
+    legend: { display: false },
+    datalabels: {
+      anchor: 'end',
+      align: 'end',
+      clamp: true,
+      clip: false,
+      offset: 2,
+      font: { size: 9 },
+      color: '#333',
+      formatter: function(value){ return fmtMillones(value); }
+    }
+  },
+  scales: {
+    x: { beginAtZero: true, ticks: { font: { size: 10 }, callback: function(v){ return fmtMillones(v); } } },
+    y: { ticks: { font: { size: 10 } } }
+  }
+};
+
+const chartDia = new Chart(document.getElementById('chartDia'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: COLOR_BARRA }] },
+  options: baseOptionsHorizontal
+});
+const chartMes = new Chart(document.getElementById('chartMes'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: COLOR_BARRA }] },
+  options: baseOptionsHorizontal
+});
+const chartAnio = new Chart(document.getElementById('chartAnio'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: COLOR_BARRA }] },
+  options: baseOptionsHorizontal
+});
+
+const baseOptionsTC = {
+  indexAxis: 'y',
+  responsive: true,
+  maintainAspectRatio: true,
+  layout: { padding: { right: 40 } },
+  plugins: {
+    legend: { display: false },
+    datalabels: {
+      anchor: 'end',
+      align: 'end',
+      clamp: true,
+      clip: false,
+      offset: 2,
+      font: { size: 9 },
+      color: '#333',
+      formatter: function(value){ return fmtTC(value); }
+    }
+  },
+  scales: {
+    x: { ticks: { font: { size: 10 }, callback: function(v){ return fmtTC(v); } } },
+    y: { ticks: { font: { size: 10 } } }
+  }
+};
+
+const chartTCBancos = new Chart(document.getElementById('chartTCBancos'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
+  options: baseOptionsTC
+});
+
+const chartMensual = new Chart(document.getElementById('chartMensual'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: COLOR_MES }] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    layout: { padding: { top: 24 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: function(ctx){ return fmtNum1(ctx.parsed.y) + ' millones Bs.'; }
+        }
+      },
+      datalabels: {
+        anchor: 'end',
+        align: 'top',
+        clamp: true,
+        clip: false,
+        font: { size: 11 },
+        color: '#333',
+        formatter: function(value){ return fmtNum1(value); }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Millones Bs.' },
+        ticks: { callback: function(v){ return fmtNum1(v); } }
+      },
+      x: {}
+    }
+  }
+});
+
+const chartEvolucionTC = new Chart(document.getElementById('chartEvolucionTC'), {
+  type: 'line',
+  data: { labels: [], datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
+      datalabels: { display: false },
+      tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + fmtTC(ctx.parsed.y); } } }
+    },
+    elements: { point: { radius: 0 }, line: { tension: 0.15 } },
+    scales: {
+      x: { ticks: { font: { size: 9 }, maxRotation: 90, minRotation: 0, autoSkip: true, maxTicksLimit: 24 } },
+      y: { ticks: { font: { size: 10 }, callback: function(v){ return fmtTC(v); } } }
+    }
+  }
+});
+
+const chartMontoDiario = new Chart(document.getElementById('chartMontoDiario'), {
+  type: 'bar',
+  data: { labels: [], datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
+      datalabels: { display: false },
+      tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': ' + fmtMillones(ctx.parsed.y) + ' millones Bs.'; } } }
+    },
+    scales: {
+      x: { ticks: { font: { size: 9 }, maxRotation: 90, minRotation: 0, autoSkip: true, maxTicksLimit: 24 } },
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Millones Bs.' },
+        ticks: { font: { size: 10 }, callback: function(v){ return fmtMillones(v); } }
+      }
+    }
+  }
+});
+
+const chartParticipacion = new Chart(document.getElementById('chartParticipacion'), {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      datalabels: {
+        color: '#fff',
+        font: { size: 10, weight: 'bold' },
+        formatter: function(value, ctx){
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          if(!total) return '';
+          const pct = value/total*100;
+          return pct >= 3 ? pct.toFixed(1)+'%' : '';
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: function(ctx){
+            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+            const pct = total ? (ctx.parsed/total*100) : 0;
+            return ctx.label + ': ' + fmtMillones(ctx.parsed) + ' mill. Bs. (' + pct.toFixed(1) + '%)';
+          }
+        }
+      }
+    }
+  }
+});
+
+// ---- Helpers de cálculo ----
+function montoBancosForRecord(rec){
+  return INSTS.map((name,i)=>({ nombre: SHORT[name], monto: rec.banks[i].monto }));
+}
+function montoBancosForMonth(monthKey){
+  const sums = INSTS.map(name=>({ nombre: SHORT[name], monto: 0 }));
+  for(const r of RECORDS){
+    if(r.monthKey === monthKey){
+      r.banks.forEach((b,i)=>{ sums[i].monto += b.monto; });
+    }
+  }
+  return sums;
+}
+function montoBancosForYear(year){
+  const sums = INSTS.map(name=>({ nombre: SHORT[name], monto: 0 }));
+  for(const r of RECORDS){
+    if(r.year === year){
+      r.banks.forEach((b,i)=>{ sums[i].monto += b.monto; });
+    }
+  }
+  return sums;
+}
+function montoBancosForRange(desde, hasta){
+  const sums = INSTS.map(name=>({ nombre: SHORT[name], monto: 0 }));
+  for(const r of RECORDS){
+    const f = isoFecha(r);
+    if(f >= desde && f <= hasta){
+      r.banks.forEach((b,i)=>{ sums[i].monto += b.monto; });
+    }
+  }
+  return sums;
+}
+function fmtFechaIso(iso){
+  const [y,m,d] = iso.split('-');
+  return d + '/' + m + '/' + y;
+}
+function updateBarChart(chart, items, selInst){
+  const sorted = items.slice().sort((a,b)=>a.monto-b.monto);
+  chart.data.labels = sorted.map(x=>x.nombre);
+  chart.data.datasets[0].data = sorted.map(x=>x.monto);
+  if(selInst === -1){
+    chart.data.datasets[0].backgroundColor = COLOR_BARRA;
+  } else {
+    const selName = SHORT[INSTS[selInst]];
+    chart.data.datasets[0].backgroundColor = sorted.map(x => x.nombre === selName ? COLOR_DEST : COLOR_BARRA);
+  }
+  chart.update();
+}
+
+// ---- Tipo de cambio de compra por banco (fecha específica) ----
+function updateTCBancos(){
+  const idx = parseInt(selFecha.value, 10);
+  const rec = RECORDS[idx];
+  const items = [{ nombre: 'TC Ref. BCB (Compra)', tc: rec.agg.tc, color: COLOR_BCB }];
+  INSTS.forEach((name,i)=>{
+    const tc = rec.banks[i].tc;
+    if(tc !== null){
+      items.push({ nombre: SHORT[name], tc: tc, color: COLOR_BARRA });
+    }
+  });
+  const bcbItem = items[0];
+  const sorted = items.slice(1).sort((a,b)=>a.tc-b.tc);
+  sorted.push(bcbItem);
+  chartTCBancos.data.labels = sorted.map(x=>x.nombre);
+  chartTCBancos.data.datasets[0].data = sorted.map(x=>x.tc);
+  chartTCBancos.data.datasets[0].backgroundColor = sorted.map(x=>x.color);
+  const vals = sorted.map(x=>x.tc);
+  chartTCBancos.options.scales.x.min = Math.floor(Math.min(...vals));
+  chartTCBancos.options.scales.x.max = Math.ceil(Math.max(...vals));
+  chartTCBancos.update();
+}
+
+// ---- Evolución TC por institución ----
+function updateEvolucionTC(){
+  const recs = getRecordsRango();
+  const datasets = [];
+  if(document.getElementById('evo_bcb').checked){
+    datasets.push({
+      label: 'TC Referencial BCB (Compra)',
+      data: recs.map(r=>r.agg.tc),
+      borderColor: COLOR_BCB,
+      backgroundColor: COLOR_BCB,
+      borderWidth: 2,
+      spanGaps: true
+    });
+  }
+  if(document.getElementById('evo_bcb_venta').checked){
+    datasets.push({
+      label: 'TC Referencial BCB (Venta)',
+      data: recs.map(r=>r.agg.tcv),
+      borderColor: COLOR_BCB,
+      backgroundColor: COLOR_BCB,
+      borderWidth: 2,
+      borderDash: [5,5],
+      spanGaps: true
+    });
+  }
+  INSTS.forEach((name,i)=>{
+    const cb = document.getElementById('evo_b'+i);
+    if(cb && cb.checked){
+      datasets.push({
+        label: SHORT[name],
+        data: recs.map(r=>r.banks[i].tc),
+        borderColor: BANK_COLORS[name],
+        backgroundColor: BANK_COLORS[name],
+        borderWidth: 1.5,
+        spanGaps: true
+      });
+    }
+  });
+  chartEvolucionTC.data.labels = recs.map(r=>fmtFecha(r));
+  chartEvolucionTC.data.datasets = datasets;
+  chartEvolucionTC.update();
+}
+
+// ---- Monto negociado por día ----
+function updateMontoDiario(){
+  const recs = getRecordsRango();
+  const datasets = [];
+  if(document.getElementById('monto_total').checked){
+    datasets.push({
+      label: 'Total Industria',
+      data: recs.map(r=>r.agg.monto),
+      backgroundColor: COLOR_TOTAL
+    });
+  }
+  INSTS.forEach((name,i)=>{
+    const cb = document.getElementById('monto_b'+i);
+    if(cb && cb.checked){
+      datasets.push({
+        label: SHORT[name],
+        data: recs.map(r=>r.banks[i].monto),
+        backgroundColor: BANK_COLORS[name]
+      });
+    }
+  });
+  chartMontoDiario.data.labels = recs.map(r=>fmtFecha(r));
+  chartMontoDiario.data.datasets = datasets;
+  chartMontoDiario.update();
+}
+
+// ---- Participación de mercado ----
+function updateParticipacion(){
+  const periodo = document.getElementById('selPeriodoPart').value;
+  const idx = parseInt(selFecha.value, 10);
+  const rec = RECORDS[idx];
+  const monthKey = selMes.value;
+  let items;
+  if(periodo === 'dia'){
+    items = INSTS.map((name,i)=>({ nombre: name, corto: SHORT[name], monto: rec.banks[i].monto }));
+  } else if(periodo === 'mes'){
+    items = montoBancosForMonth(monthKey).map((x,i)=>({ nombre: INSTS[i], corto: x.nombre, monto: x.monto }));
+  } else if(periodo === 'rango'){
+    const desde = inputMontoDiaDesde.value;
+    const hasta = inputMontoDiaHasta.value;
+    if(desde && hasta && desde <= hasta){
+      items = montoBancosForRange(desde, hasta).map((x,i)=>({ nombre: INSTS[i], corto: x.nombre, monto: x.monto }));
+    } else {
+      items = INSTS.map((name,i)=>({ nombre: name, corto: SHORT[name], monto: rec.banks[i].monto }));
+    }
+  } else {
+    items = montoBancosForYear(rec.year).map((x,i)=>({ nombre: INSTS[i], corto: x.nombre, monto: x.monto }));
+  }
+  items = items.filter(x=>x.monto > 0).sort((a,b)=>b.monto-a.monto);
+  const total = items.reduce((s,x)=>s+x.monto,0);
+
+  chartParticipacion.data.labels = items.map(x=>x.corto);
+  chartParticipacion.data.datasets[0].data = items.map(x=>x.monto);
+  chartParticipacion.data.datasets[0].backgroundColor = items.map(x=>BANK_COLORS[x.nombre]);
+  chartParticipacion.update();
+
+  document.getElementById('totalParticipacion').textContent = 'Total operado: ' + fmtMillones(total) + ' millones Bs.';
+
+  const tbody = document.querySelector('#tablaParticipacion tbody');
+  tbody.innerHTML = '';
+  items.forEach(x=>{
+    const pct = total ? (x.monto/total*100) : 0;
+    const tr = document.createElement('tr');
+    const tdNombre = document.createElement('td');
+    const swatch = document.createElement('span');
+    swatch.className = 'color-swatch';
+    swatch.style.background = BANK_COLORS[x.nombre];
+    tdNombre.appendChild(swatch);
+    tdNombre.appendChild(document.createTextNode(x.corto));
+    const tdMonto = document.createElement('td');
+    tdMonto.textContent = fmtMillones(x.monto);
+    const tdPct = document.createElement('td');
+    tdPct.textContent = pct.toFixed(1) + '%';
+    tr.appendChild(tdNombre);
+    tr.appendChild(tdMonto);
+    tr.appendChild(tdPct);
+    tbody.appendChild(tr);
+  });
+}
+
+// ---- Actualización principal ----
+function update(){
+  const idx = parseInt(selFecha.value, 10);
+  const monthKey = selMes.value;
+  const selInst = parseInt(selBanco.value, 10); // -1 = Todos
+
+  const rec = RECORDS[idx];
+
+  // Fecha de análisis
+  document.getElementById('fechaAnalisis').textContent = 'Fecha de análisis: ' + fmtFecha(rec);
+
+  // KPIs (siempre sobre el conjunto de bancos, independientes del filtro de institución)
+  document.getElementById('kpiCompraProm').textContent = fmtTC(rec.agg.tc);
+  document.getElementById('kpiVentaProm').textContent = fmtTC(rec.agg.tcv);
+
+  let max = null, min = null, maxBank = '-', minBank = '-';
+  rec.banks.forEach((b,i)=>{
+    if(b.tc !== null){
+      if(max === null || b.tc > max){ max = b.tc; maxBank = INSTS[i]; }
+      if(min === null || b.tc < min){ min = b.tc; minBank = INSTS[i]; }
+    }
+  });
+  document.getElementById('kpiCompraMax').textContent = fmtTC(max);
+  document.getElementById('kpiCompraMaxBanco').textContent = maxBank;
+  document.getElementById('kpiCompraMin').textContent = fmtTC(min);
+  document.getElementById('kpiCompraMinBanco').textContent = minBank;
+
+  // Montos (dependen del filtro de institución)
+  let etiquetaInst = selInst === -1 ? '' : ' - ' + SHORT[INSTS[selInst]];
+  document.getElementById('labelMontoMes').textContent = 'Monto Acumulado en el Mes (millones Bs.)' + etiquetaInst;
+  document.getElementById('labelMontoAnio').textContent = 'Monto Acumulado en el Año a la Fecha (millones Bs.)' + etiquetaInst;
+
+  // Rango personalizado para "Monto Día" (KPI y gráfico de la izquierda)
+  const rangoDiaDesde = inputMontoDiaDesde.value;
+  const rangoDiaHasta = inputMontoDiaHasta.value;
+  const rangoDiaActivo = !!(rangoDiaDesde && rangoDiaHasta && rangoDiaDesde <= rangoDiaHasta);
+  const recsRangoDia = rangoDiaActivo ? RECORDS.filter(r=>{ const f = isoFecha(r); return f >= rangoDiaDesde && f <= rangoDiaHasta; }) : null;
+
+  document.getElementById('labelMontoDia').textContent = (rangoDiaActivo ? 'Monto Operado en el Rango (millones Bs.)' : 'Monto Operado en la Fecha (millones Bs.)') + etiquetaInst;
+
+  let montoDia, montoMes, montoAnio;
+  if(selInst === -1){
+    montoDia = rangoDiaActivo ? recsRangoDia.reduce((s,r)=>s+r.agg.monto,0) : rec.agg.monto;
+    montoMes = RECORDS.filter(r=>r.monthKey===monthKey).reduce((s,r)=>s+r.agg.monto,0);
+    montoAnio = RECORDS.filter(r=>r.year===rec.year && r.order<=rec.order).reduce((s,r)=>s+r.agg.monto,0);
+  } else {
+    montoDia = rangoDiaActivo ? recsRangoDia.reduce((s,r)=>s+r.banks[selInst].monto,0) : rec.banks[selInst].monto;
+    montoMes = RECORDS.filter(r=>r.monthKey===monthKey).reduce((s,r)=>s+r.banks[selInst].monto,0);
+    montoAnio = RECORDS.filter(r=>r.year===rec.year && r.order<=rec.order).reduce((s,r)=>s+r.banks[selInst].monto,0);
+  }
+  document.getElementById('montoDia').textContent = fmtMillones(montoDia);
+  document.getElementById('montoMes').textContent = fmtMillones(montoMes);
+  document.getElementById('montoAnio').textContent = fmtMillones(montoAnio);
+
+  // Títulos de gráficos
+  const [my, mm] = monthKey.split('-');
+  document.getElementById('tituloDia').textContent = rangoDiaActivo
+    ? 'Monto (' + fmtFechaIso(rangoDiaDesde) + ' - ' + fmtFechaIso(rangoDiaHasta) + ') por Banco'
+    : 'Monto Día (' + fmtFecha(rec) + ') por Banco';
+  document.getElementById('tituloMes').textContent = 'Monto Mes (' + MONTH_FULL[parseInt(mm,10)-1] + ' ' + my + ') por Banco';
+  document.getElementById('tituloAnio').textContent = 'Monto Año (' + rec.year + ') por Banco';
+  document.getElementById('tituloMensual').textContent = 'Monto Total por Mes' + etiquetaInst;
+  document.getElementById('tituloTCBancos').textContent = 'Tipo de Cambio de Compra por Banco (' + fmtFecha(rec) + ')';
+
+  // Gráficos de barras
+  updateBarChart(chartDia, rangoDiaActivo ? montoBancosForRange(rangoDiaDesde, rangoDiaHasta) : montoBancosForRecord(rec), selInst);
+  updateBarChart(chartMes, montoBancosForMonth(monthKey), selInst);
+  updateBarChart(chartAnio, montoBancosForYear(rec.year), selInst);
+  updateTCBancos();
+
+  // Evolución mensual
+  const evoLabels = [];
+  const evoData = [];
+  const seen = {};
+  for(const r of RECORDS){
+    if(!(r.monthKey in seen)){ seen[r.monthKey]=evoLabels.length; evoLabels.push(r.monthKey); evoData.push(0); }
+    const idx2 = seen[r.monthKey];
+    evoData[idx2] += (selInst === -1 ? r.agg.monto : r.banks[selInst].monto);
+  }
+  chartMensual.data.labels = evoLabels;
+  chartMensual.data.datasets[0].data = evoData.map(v=>v/1000000);
+  chartMensual.data.datasets[0].backgroundColor = COLOR_MES;
+  chartMensual.update();
+
+  // Participación de mercado (depende de fecha/mes seleccionados)
+  updateParticipacion();
+}
+
+selFecha.addEventListener('change', update);
+selMes.addEventListener('change', update);
+selBanco.addEventListener('change', update);
+inputMontoDiaDesde.addEventListener('change', update);
+inputMontoDiaHasta.addEventListener('change', update);
+document.getElementById('btnReset').addEventListener('click', function(){
+  selFecha.value = lastIdx;
+  selMes.value = RECORDS[lastIdx].monthKey;
+  selBanco.value = '-1';
+  inputMontoDiaDesde.value = '';
+  inputMontoDiaHasta.value = '';
+  update();
+});
+
+// ---- Listeners de los nuevos comparadores ----
+panelEvoBancos.addEventListener('change', updateEvolucionTC);
+panelMontoBancos.addEventListener('change', updateMontoDiario);
+
+document.getElementById('btnEvoTodos').addEventListener('click', function(){
+  document.getElementById('evo_bcb').checked = true;
+  document.getElementById('evo_bcb_venta').checked = true;
+  INSTS.forEach((_,i)=>{ document.getElementById('evo_b'+i).checked = true; });
+  updateEvolucionTC();
+});
+document.getElementById('btnEvoNinguno').addEventListener('click', function(){
+  document.getElementById('evo_bcb').checked = false;
+  document.getElementById('evo_bcb_venta').checked = false;
+  INSTS.forEach((_,i)=>{ document.getElementById('evo_b'+i).checked = false; });
+  updateEvolucionTC();
+});
+document.getElementById('btnMontoTodos').addEventListener('click', function(){
+  document.getElementById('monto_total').checked = true;
+  INSTS.forEach((_,i)=>{ document.getElementById('monto_b'+i).checked = true; });
+  updateMontoDiario();
+});
+document.getElementById('btnMontoNinguno').addEventListener('click', function(){
+  document.getElementById('monto_total').checked = false;
+  INSTS.forEach((_,i)=>{ document.getElementById('monto_b'+i).checked = false; });
+  updateMontoDiario();
+});
+document.getElementById('selPeriodoPart').addEventListener('change', updateParticipacion);
+
+// ---- Listeners del selector de rango de fechas ----
+selRangoTipo.addEventListener('change', function(){
+  actualizarVisibilidadRango();
+  updateEvolucionTC();
+  updateMontoDiario();
+});
+selRangoMes.addEventListener('change', function(){ updateEvolucionTC(); updateMontoDiario(); });
+inputRangoDesde.addEventListener('change', function(){ updateEvolucionTC(); updateMontoDiario(); });
+inputRangoHasta.addEventListener('change', function(){ updateEvolucionTC(); updateMontoDiario(); });
+
+update();
+actualizarVisibilidadRango();
+updateEvolucionTC();
+updateMontoDiario();
+</script>
+
+</body>
+</html>
