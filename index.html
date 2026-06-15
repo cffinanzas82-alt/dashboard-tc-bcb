@@ -1027,7 +1027,7 @@ function updateTCBancos(){
       items.push({ nombre: SHORT[name], tc: tc, color: COLOR_BARRA });
     }
   });
-  const sorted = items.slice().sort((a,b)=>b.tc-a.tc);
+  const sorted = items.slice().sort((a,b)=>a.tc-b.tc);
   chartTCBancos.data.labels = sorted.map(x=>x.nombre);
   chartTCBancos.data.datasets[0].data = sorted.map(x=>x.tc);
   chartTCBancos.data.datasets[0].backgroundColor = sorted.map(x=>x.color);
