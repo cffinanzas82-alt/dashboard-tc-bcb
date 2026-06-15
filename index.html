@@ -152,7 +152,7 @@
     .grid-kpi, .grid-monto, .charts-row { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 700px) {
-    .grid-kpi, .grid-monto, .charts-row { grid-template-columns: 1fr; }
+    .grid-kpi, .grid-monto, .charts-row, .tc-banco-row, .grid-kpi-side { grid-template-columns: 1fr; }
     .filtro select { min-width: 140px; }
   }
   .panel-actions {
@@ -205,7 +205,19 @@
   .chart-wrap-tc {
     position: relative;
     height: 420px;
-    width: 50%;
+  }
+  .tc-banco-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 24px;
+    align-items: stretch;
+  }
+  .grid-kpi-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 14px;
   }
   .participacion-row {
     display: grid;
@@ -283,33 +295,31 @@
   </div>
 </div>
 
-<!-- KPIs -->
-<div class="grid-kpi">
-  <div class="card">
-    <div class="label">TC Referencial BCB Compra</div>
-    <div class="valor valor-grande" id="kpiCompraProm">-</div>
-  </div>
-  <div class="card">
-    <div class="label">TC Referencial BCB Venta</div>
-    <div class="valor valor-grande" id="kpiVentaProm">-</div>
-  </div>
-  <div class="card">
-    <div class="label">TC Compra Máximo</div>
-    <div class="valor valor-grande" id="kpiCompraMax">-</div>
-    <div class="subtitulo" id="kpiCompraMaxBanco">-</div>
-  </div>
-  <div class="card">
-    <div class="label">TC Compra Mínimo</div>
-    <div class="valor valor-grande" id="kpiCompraMin">-</div>
-    <div class="subtitulo" id="kpiCompraMinBanco">-</div>
-  </div>
-</div>
-
-<!-- TC de Compra por Banco (fecha específica) -->
-<div class="charts-row">
-  <div class="chart-card full">
+<!-- TC de Compra por Banco (fecha específica) + KPIs -->
+<div class="tc-banco-row">
+  <div class="chart-card">
     <h3 id="tituloTCBancos">Tipo de Cambio de Compra por Banco</h3>
     <div class="chart-wrap-tc"><canvas id="chartTCBancos"></canvas></div>
+  </div>
+  <div class="grid-kpi-side">
+    <div class="card">
+      <div class="label">TC Referencial BCB Compra</div>
+      <div class="valor valor-grande" id="kpiCompraProm">-</div>
+    </div>
+    <div class="card">
+      <div class="label">TC Referencial BCB Venta</div>
+      <div class="valor valor-grande" id="kpiVentaProm">-</div>
+    </div>
+    <div class="card">
+      <div class="label">TC Compra Máximo</div>
+      <div class="valor valor-grande" id="kpiCompraMax">-</div>
+      <div class="subtitulo" id="kpiCompraMaxBanco">-</div>
+    </div>
+    <div class="card">
+      <div class="label">TC Compra Mínimo</div>
+      <div class="valor valor-grande" id="kpiCompraMin">-</div>
+      <div class="subtitulo" id="kpiCompraMinBanco">-</div>
+    </div>
   </div>
 </div>
 
